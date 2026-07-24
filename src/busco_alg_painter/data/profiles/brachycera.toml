@@ -1,0 +1,41 @@
+[profile]
+id = "brachycera"
+title = "Brachycera ancestral linkage groups"
+description = "Ten Brachycera linkage groups resulting from four ancestral fissions."
+paper_doi = "10.64898/2026.06.01.729285"
+busco_dataset = "diptera_odb12"
+taxid = 7203
+taxonomy_names = ["Brachycera"]
+auto_priority = 200
+auto_default = false
+default_palette = "default"
+
+[reference]
+table = "../references/ALGs_syngraph_brachycera.tsv"
+source = "https://raw.githubusercontent.com/Obscuromics/diptera-ALGs/refs/heads/main/tables/ALGs_syngraph_brachycera.tsv"
+delimiter = "whitespace"
+busco_column = 0
+alg_column = 1
+
+[labels]
+order = ["db1a", "db1b", "db2a", "db2b", "db3a", "db3b", "db4a", "db4b", "db5", "db6"]
+legend_title = "Brachycera ALGs"
+legend_columns = 1
+
+[plot]
+bar_height = 0.45
+row_height_cm = 0.85
+min_plot_height_cm = 12
+tile_width_bp = 50000
+
+[palettes.default]
+db1a = "#25d8a0ff"
+db1b = "#168a65ff"
+db2a = "#fccf8f"
+db2b = "#f29717ff"
+db3a = "#8d96e5"
+db3b = "#005990ff"
+db4a = "#f0e354ff"
+db4b = "#e2d119ff"
+db5 = "#60b5e1ff"
+db6 = "black"

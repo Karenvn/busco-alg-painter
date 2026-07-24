@@ -1,0 +1,39 @@
+[profile]
+id = "coleoptera"
+title = "Coleoptera ancestral linkage groups"
+description = "Eight ancestral linkage groups reconstructed for beetles."
+paper_doi = "10.64898/2026.07.17.739156"
+busco_dataset = "coleoptera_odb12"
+taxid = 7041
+taxonomy_names = ["Coleoptera"]
+auto_priority = 100
+auto_default = true
+default_palette = "default"
+
+[reference]
+table = "../references/coleoptera_TableS2.csv"
+source = "https://raw.githubusercontent.com/Obscuromics/coleoptera-ALGs/refs/heads/main/tables/TableS2.csv"
+delimiter = ","
+busco_column = 0
+alg_column = 1
+
+[labels]
+order = ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "CX"]
+legend_title = "Coleoptera ALGs"
+legend_columns = 1
+
+[plot]
+bar_height = 0.45
+row_height_cm = 0.85
+min_plot_height_cm = 12
+tile_width_bp = 50000
+
+[palettes.default]
+C1 = "#9C3587"
+C2 = "#EAADCF"
+C3 = "#EFE999"
+C4 = "#D8CA02"
+C5 = "#B6992D"
+C6 = "#018571"
+C7 = "#80CDC1"
+CX = "black"

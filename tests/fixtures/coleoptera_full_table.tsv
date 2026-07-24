@@ -1,0 +1,12 @@
+# BUSCO version is: 6.0.0
+# The lineage dataset is: coleoptera_odb12 (Creation date: test, number of BUSCOs: 3729)
+# Busco id	Status	Sequence	Gene Start	Gene End
+100357at7041	Complete	chr1	100000	100200
+100433at7041	Complete	chr1	300000	300200
+100793at7041	Complete	chr1	500000	500200
+100120at7041	Complete	chr1	700000	700200
+100792at7041	Complete	chr2	100000	100200
+101100at7041	Complete	chr2	300000	300200
+100009at7041	Complete	chr2	500000	500200
+10053at7041	Complete	chr2	700000	700200
+101435at7041	Complete	chr2	900000	900200

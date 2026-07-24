@@ -1,0 +1,37 @@
+[profile]
+id = "diptera"
+title = "Diptera ancestral linkage groups"
+description = "Six ancestral linkage groups reconstructed for Diptera."
+paper_doi = "10.64898/2026.06.01.729285"
+busco_dataset = "diptera_odb12"
+taxid = 7147
+taxonomy_names = ["Diptera"]
+auto_priority = 100
+auto_default = true
+default_palette = "default"
+
+[reference]
+table = "../references/ALGs_syngraph_diptera.tsv"
+source = "https://raw.githubusercontent.com/Obscuromics/diptera-ALGs/refs/heads/main/tables/ALGs_syngraph_diptera.tsv"
+delimiter = "whitespace"
+busco_column = 0
+alg_column = 1
+
+[labels]
+order = ["d1", "d2", "d3", "d4", "d5", "d6"]
+legend_title = "Diptera ALGs"
+legend_columns = 1
+
+[plot]
+bar_height = 0.45
+row_height_cm = 0.85
+min_plot_height_cm = 12
+tile_width_bp = 50000
+
+[palettes.default]
+d1 = "#169e73ff"
+d2 = "#e59d38ff"
+d3 = "#1573afff"
+d4 = "#f0e354ff"
+d5 = "#60b5e1ff"
+d6 = "black"

@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "busco-alg-painter"
+version = "0.1.0"
+description = "Map BUSCO full_table.tsv files to taxon-specific ancestral linkage groups and plot draft or final assemblies."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Karen van Niekerk" }
+]
+dependencies = [
+    "matplotlib",
+    "pandas",
+    "requests",
+    "tomli>=2; python_version < '3.11'",
+]
+
+[project.scripts]
+busco-alg-painter = "busco_alg_painter.cli:main"
+bap = "busco_alg_painter.cli:main"
+diptera-busco-painter = "busco_alg_painter.cli:diptera_main"
+dbp = "busco_alg_painter.cli:diptera_main"
+merian-busco-painter = "busco_alg_painter.cli:merian_main"
+mbp = "busco_alg_painter.cli:merian_main"
+buscopainter = "busco_alg_painter.cli:paint_main"
+plot-buscopainter = "busco_alg_painter.cli:plot_main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+busco_alg_painter = [
+    "data/profiles/*.toml",
+    "data/references/*.tsv",
+    "data/references/*.csv",
+    "data/references/*.sha256",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
