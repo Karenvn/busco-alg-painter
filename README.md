@@ -1,9 +1,42 @@
 # busco-alg-painter
 
 `busco-alg-painter` maps BUSCO genes to taxon-specific ancestral linkage
-groups (ALGs) and plots those assignments along chromosomes or scaffolds. One
-shared mapper and plotter supports Lepidoptera, Diptera and Coleoptera through
+groups (ALGs) and plots those assignments along chromosomes or scaffolds. These plots
+are for use in genome note workflows and also for viewing draft assemblies. One
+shared mapper and plotter supports Lepidoptera, Diptera and Coleoptera by using
 versioned profile files.
+
+## Batch mode: the primary workflow
+
+A batch script is included to produce plots for genome notes. `busco_to_algs.sh` reads a
+ToLID/accession table, finds each assembly's BUSCO results, selects the
+appropriate ALG profile and produces the mapping tables and plots for every
+assembly.
+
+It expects BUSCO results at
+`${BUSCO_DIR}/${ToLID}/full_table.tsv` and a tab-separated accession table whose
+first two columns are `ToLID` and the assembly accession:
+
+```text
+ToLID	assembly_accession
+ilHelArmi9	GCA_963930815.1
+idWinCrue1	GCA_965649395.1
+```
+
+Additional columns, such as species name, are allowed; the batch script reads
+the first two columns.
+
+```bash
+DATA_ROOT=/path/to/project_data \
+BUSCO_DIR=/path/to/project_data/busco \
+OUTPUT_DIR=/path/to/project_data/algs \
+ACCESSION_FILE=/path/to/tolid_accessions.tsv \
+PROFILE=auto \
+bash busco_to_algs.sh
+```
+
+Single-assembly `run`, `paint` and `plot` commands remain available for
+individual genome notes, draft assemblies and testing.
 
 ## Included profiles
 
@@ -37,9 +70,9 @@ Please cite the paper associated with the profile used:
   to other insect orders](https://doi.org/10.64898/2026.07.17.739156).
   bioRxiv preprint.
 
-## Reference-table provenance
+## Reference table sources
 
-Fixed copies are bundled so that a run remains reproducible and does not
+Fixed copies of the reference tables are included, so that a run remains reproducible and does not
 depend on a live download:
 
 - Merian elements:
@@ -81,7 +114,7 @@ plot-buscopainter
 The Diptera and Merian command names are compatibility entry points. New
 workflows should use `busco-alg-painter` or `bap`.
 
-## Quick start
+## Single assembly mode
 
 Run the complete mapping and plotting workflow:
 
@@ -92,7 +125,8 @@ busco-alg-painter run \
   --prefix output/
 ```
 
-The same command works with `merian`, `diptera` or `brachycera`.
+The command works with all four bundled profiles: `merian`, `diptera`,
+`brachycera` and `coleoptera`.
 
 `--profile auto` reads the BUSCO dataset header:
 
@@ -155,7 +189,9 @@ The standardized location columns are:
 buscoID    query_chr    position    assigned_alg    status
 ```
 
-The plotter also accepts older Merian tables containing `assigned_chr`.
+For backward compatibility, `plot` can also read `all_location.tsv` files
+created by older versions of the Merian painter, where the assignment column
+was named `assigned_chr`. New output uses `assigned_alg`.
 
 The lower-level commands are:
 
@@ -190,23 +226,6 @@ busco-alg-painter plot \
   --prefix output/merian
 ```
 
-## Batch workflow
-
-`busco_to_algs.sh` processes a ToLID/accession table. It expects BUSCO results
-at `${BUSCO_DIR}/${ToLID}/full_table.tsv`.
-
-```bash
-DATA_ROOT=/path/to/project_data \
-BUSCO_DIR=/path/to/project_data/busco \
-OUTPUT_DIR=/path/to/project_data/algs \
-ACCESSION_FILE=/path/to/tolid_accessions.tsv \
-PROFILE=auto \
-bash busco_to_algs.sh
-```
-
-The accession table must contain `ToLID` and assembly accession as its first
-two tab-separated columns.
-
 ## Custom profiles
 
 Copy one of the bundled TOML files and edit its biological metadata, reference
@@ -223,12 +242,19 @@ busco-alg-painter run \
 `--reference-table` overrides only the table. `--config` is needed when the
 labels, palette or table schema also differ.
 
-## Code provenance
+## Code and reference table sources
 
-This repository consolidates `merian-busco-painter` and
-`diptera-busco-painter`. The Merian implementation was adapted from
-[`charlottewright/lep_busco_painter`](https://github.com/charlottewright/lep_busco_painter);
-its MIT licence and attribution are retained in `LICENSE`.
+The implementations and reference data brought together here are derived
+from:
+
+- **Lepidoptera / Merian elements:**
+  [`charlottewright/lep_busco_painter`](https://github.com/charlottewright/lep_busco_painter)
+- **Diptera and Brachycera ALGs:**
+  [`Obscuromics/diptera-ALGs`](https://github.com/Obscuromics/diptera-ALGs)
+- **Coleoptera ALGs:**
+  [`Obscuromics/coleoptera-ALGs`](https://github.com/Obscuromics/coleoptera-ALGs)
+
+The Merian painter's MIT licence and attribution are retained in `LICENSE`.
 
 ## Development
 
