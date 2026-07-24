@@ -40,7 +40,13 @@ individual genome notes, draft assemblies and testing.
 
 ## Included profiles
 
-| Profile | Groups | Required BUSCO dataset | Reference assignments |
+The reference assignments are keyed to specific BUSCO lineage dataset
+releases. The `odb10` and `odb12` suffixes below identify lineage dataset
+releases, not versions of the BUSCO software itself. No particular BUSCO
+software release is pinned; compatibility is determined from the lineage
+dataset recorded in `full_table.tsv`.
+
+| Profile | Groups | Required BUSCO lineage dataset | Reference assignments |
 | --- | ---: | --- | ---: |
 | `merian` | MZ, M1–M31 | `lepidoptera_odb10` | 4,112 |
 | `diptera` | d1–d6 | `diptera_odb12` | 3,804 |
@@ -84,12 +90,11 @@ depend on a live download:
 - Coleoptera:
   [`TableS2.csv`](https://raw.githubusercontent.com/Obscuromics/coleoptera-ALGs/refs/heads/main/tables/TableS2.csv)
 
-SHA-256 values for the bundled snapshots are recorded in
-`REFERENCE_CHECKSUMS.sha256`.
+SHA-256 values for these tables are recorded in `REFERENCE_CHECKSUMS.sha256`.
 
 The Coleoptera source table contains 3,729
 `coleoptera_odb12` BUSCOs: 3,603 assigned to C1–C7 or CX and 126 reported as
-`unassigned`. The latter are deliberately excluded from the reference mapping.
+`unassigned`. The latter are excluded from the reference mapping.
 
 ## Installation
 
@@ -125,7 +130,7 @@ busco-alg-painter run \
   --prefix output/
 ```
 
-The command works with all four bundled profiles: `merian`, `diptera`,
+The command works with all four profiles: `merian`, `diptera`,
 `brachycera` and `coleoptera`.
 
 `--profile auto` reads the BUSCO dataset header:
@@ -163,8 +168,10 @@ added to the length of their parent chromosome.
 
 ## BUSCO compatibility checks
 
-BUSCO identifiers are dataset-specific. A profile/input mismatch is therefore
-an error rather than a warning:
+The check uses the lineage dataset named by `# The lineage dataset is:` in the
+BUSCO table header; it does not require a particular value in the
+`# BUSCO version is:` header. BUSCO identifiers are lineage-dataset-specific,
+so a profile/input mismatch is an error rather than a warning:
 
 ```text
 BUSCO table reports coleoptera_odb12, but profile 'merian'
@@ -228,7 +235,7 @@ busco-alg-painter plot \
 
 ## Custom profiles
 
-Copy one of the bundled TOML files and edit its biological metadata, reference
+Copy one of the TOML files and edit its biological metadata, reference
 schema, labels and palette. Relative reference-table paths are resolved from
 the custom configuration file:
 
