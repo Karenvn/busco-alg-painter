@@ -107,6 +107,15 @@ def add_plot_options(parser: argparse.ArgumentParser) -> None:
         help="Named palette from the selected profile (default: profile setting)",
     )
     parser.add_argument(
+        "--bar-alg-labels",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Show ALG text beside chromosome bars "
+            "(default: show for Merian plots only)"
+        ),
+    )
+    parser.add_argument(
         "--label-threshold",
         type=int,
         default=5,
@@ -141,7 +150,7 @@ def add_plot_options(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=DEFAULT_LABEL_WINDOW_MIN_FRACTION,
         help=(
-            "Minimum fraction of assigned BUSCOs in a window that must belong "
+            "Minimum fraction of all BUSCO hits in a window that must belong "
             f"to the dominant ALG (default: {DEFAULT_LABEL_WINDOW_MIN_FRACTION})"
         ),
     )
@@ -177,6 +186,14 @@ def add_lengths_options(parser: argparse.ArgumentParser) -> None:
         help=(
             "auto detects the lengths format; final expects Chrom/Length_Mb TSV; "
             "draft expects .fai"
+        ),
+    )
+    parser.add_argument(
+        "--allow-estimated-lengths",
+        action="store_true",
+        help=(
+            "Allow an approximate plot without --lengths by estimating each "
+            "sequence end from its final BUSCO position"
         ),
     )
 
@@ -286,6 +303,8 @@ def run_paint(args: argparse.Namespace) -> None:
     print(f"[INFO]   {outputs.all_locations}")
     if outputs.wrote_lengths:
         print(f"[INFO]   {outputs.chrom_lengths}")
+    if outputs.wrote_sequence_layout:
+        print(f"[INFO]   {outputs.sequence_layout}")
     if outputs.wrote_summary:
         print(f"[INFO]   {outputs.summary}")
 
@@ -299,6 +318,7 @@ def run_plot(args: argparse.Namespace) -> None:
         profile_name=args.profile,
         config_path=args.config,
         palette=args.palette,
+        show_bar_alg_labels=args.bar_alg_labels,
         label_threshold=args.label_threshold,
         label_wrap=args.label_wrap,
         label_window_mb=args.label_window_mb,
@@ -306,6 +326,7 @@ def run_plot(args: argparse.Namespace) -> None:
         label_window_min_fraction=args.label_window_min_fraction,
         panel_size=args.panel_size,
         max_columns=args.max_columns,
+        allow_estimated_lengths=args.allow_estimated_lengths,
     )
 
 
@@ -347,6 +368,7 @@ def run_all(args: argparse.Namespace) -> None:
         output_prefix=plot_prefix,
         profile=outputs.profile,
         palette=args.palette,
+        show_bar_alg_labels=args.bar_alg_labels,
         label_threshold=args.label_threshold,
         label_wrap=args.label_wrap,
         label_window_mb=args.label_window_mb,
@@ -354,12 +376,15 @@ def run_all(args: argparse.Namespace) -> None:
         label_window_min_fraction=args.label_window_min_fraction,
         panel_size=args.panel_size,
         max_columns=args.max_columns,
+        allow_estimated_lengths=args.allow_estimated_lengths,
     )
     print(f"[INFO] Profile: {outputs.profile.id}")
     print("[INFO] Run outputs written:")
     print(f"[INFO]   {outputs.all_locations}")
     if outputs.wrote_lengths:
         print(f"[INFO]   {outputs.chrom_lengths}")
+    if outputs.wrote_sequence_layout:
+        print(f"[INFO]   {outputs.sequence_layout}")
     if outputs.wrote_summary:
         print(f"[INFO]   {outputs.summary}")
     print(f"[INFO]   {plot_prefix}.png")

@@ -22,6 +22,7 @@ class PlotDefaults:
     row_height_cm: float = 0.85
     min_plot_height_cm: float = 12.0
     tile_width_bp: int = 50_000
+    marker_linewidth_pt: float | None = None
 
 
 @dataclass(frozen=True)
@@ -147,6 +148,11 @@ def load_profile(
             row_height_cm=float(plot_data.get("row_height_cm", 0.85)),
             min_plot_height_cm=float(plot_data.get("min_plot_height_cm", 12)),
             tile_width_bp=int(plot_data.get("tile_width_bp", 50_000)),
+            marker_linewidth_pt=(
+                float(plot_data["marker_linewidth_pt"])
+                if "marker_linewidth_pt" in plot_data
+                else None
+            ),
         ),
         config_path=path,
     )
@@ -180,7 +186,8 @@ def profile_from_taxonomy_ids(
     candidates = [
         profile
         for profile in (profiles or load_bundled_profiles())
-        if profile.busco_dataset == dataset and profile.taxid in lineage_ids
+        if profile.busco_dataset == dataset
+        and profile.taxid in lineage_ids
     ]
     if not candidates:
         return None

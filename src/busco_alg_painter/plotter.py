@@ -104,19 +104,65 @@ def load_lengths(lengths_file: Path, assembly_mode: str = "auto") -> pd.DataFram
         )
 
     if detected == "final":
-        chrom_lengths = pd.read_csv(lengths_file, sep="\t")
-        chrom_lengths["length"] = chrom_lengths["Length_Mb"] * 1e6
-        return chrom_lengths.rename(columns={"Chrom": "query_chr"})[
-            ["query_chr", "length"]
+        chrom_lengths = pd.read_csv(lengths_file, sep="\t", dtype={"Chrom": str})
+        if "Length_bp" in chrom_lengths.columns:
+            chrom_lengths["length"] = pd.to_numeric(
+                chrom_lengths["Length_bp"], errors="raise"
+            )
+        else:
+            chrom_lengths["length"] = (
+                pd.to_numeric(chrom_lengths["Length_Mb"], errors="raise") * 1e6
+            )
+        if "Localized_Length_bp" in chrom_lengths.columns:
+            chrom_lengths["localized_length"] = pd.to_numeric(
+                chrom_lengths["Localized_Length_bp"], errors="raise"
+            )
+        else:
+            chrom_lengths["localized_length"] = chrom_lengths["length"]
+        if "Unlocalized_Length_bp" in chrom_lengths.columns:
+            chrom_lengths["unlocalized_length"] = pd.to_numeric(
+                chrom_lengths["Unlocalized_Length_bp"], errors="raise"
+            )
+        else:
+            chrom_lengths["unlocalized_length"] = 0
+        result = chrom_lengths.rename(columns={"Chrom": "query_chr"})[
+            ["query_chr", "length", "localized_length", "unlocalized_length"]
         ]
+    else:
+        result = pd.read_csv(
+            lengths_file,
+            sep="\t",
+            header=None,
+            usecols=[0, 1],
+            names=["query_chr", "length"],
+            dtype={"query_chr": str},
+        )
+        result["localized_length"] = result["length"]
+        result["unlocalized_length"] = 0
 
-    return pd.read_csv(
-        lengths_file,
-        sep="\t",
-        header=None,
-        usecols=[0, 1],
-        names=["query_chr", "length"],
-    )
+    result["query_chr"] = result["query_chr"].astype(str)
+    numeric_columns = ("length", "localized_length", "unlocalized_length")
+    for column in numeric_columns:
+        result[column] = pd.to_numeric(result[column], errors="coerce")
+    if result["query_chr"].duplicated().any():
+        duplicate = result.loc[result["query_chr"].duplicated(), "query_chr"].iloc[0]
+        raise ValueError(f"Lengths file contains duplicate sequence {duplicate!r}")
+    if result[list(numeric_columns)].isna().any().any():
+        raise ValueError("Lengths file contains a missing or non-numeric length")
+    if (result["length"] <= 0).any() or (result["localized_length"] <= 0).any():
+        raise ValueError("All chromosome/scaffold lengths must be greater than 0")
+    if (result["unlocalized_length"] < 0).any():
+        raise ValueError("Unlocalized chromosome lengths cannot be negative")
+    if (
+        (result["localized_length"] + result["unlocalized_length"] - result["length"])
+        .abs()
+        .gt(0.5)
+        .any()
+    ):
+        raise ValueError(
+            "Length_bp must equal Localized_Length_bp + Unlocalized_Length_bp"
+        )
+    return result
 
 
 def normalize_location_columns(locations: pd.DataFrame) -> pd.DataFrame:
@@ -126,7 +172,9 @@ def normalize_location_columns(locations: pd.DataFrame) -> pd.DataFrame:
     if "assigned_alg" not in locations.columns:
         raise ValueError("Location table must contain assigned_alg or assigned_chr")
 
-    locations["query_chr"] = locations["query_chr"].str.replace(":.*", "", regex=True)
+    locations["query_chr"] = (
+        locations["query_chr"].astype(str).str.replace(":.*", "", regex=True)
+    )
     locations["position"] = pd.to_numeric(locations["position"], errors="coerce")
     locations["assigned_alg"] = locations["assigned_alg"].astype(str)
     return locations
@@ -142,7 +190,10 @@ def canonicalize_alg_labels(locations: pd.DataFrame, profile: Profile) -> pd.Dat
 
 
 def load_data(
-    location_file: Path, lengths_file: Path | None = None, assembly_mode: str = "auto"
+    location_file: Path,
+    lengths_file: Path | None = None,
+    assembly_mode: str = "auto",
+    allow_estimated_lengths: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Load BUSCO locations and chromosome/scaffold lengths."""
     locations = pd.read_csv(location_file, sep="\t", keep_default_na=False)
@@ -151,13 +202,21 @@ def load_data(
     if lengths_file:
         chrom_lengths = load_lengths(lengths_file, assembly_mode=assembly_mode)
     else:
-        if assembly_mode in {"final", "draft"}:
-            print(
-                "[WARN] No lengths file supplied; estimating lengths from BUSCO "
-                f"positions despite --assembly-mode {assembly_mode}"
+        if not allow_estimated_lengths:
+            raise ValueError(
+                "A chromosome/scaffold lengths file is required for an accurate "
+                "plot. Supply --lengths (preferably the .fai for the BUSCO input) "
+                "or use --allow-estimated-lengths for an explicitly approximate "
+                "exploratory plot."
             )
+        print(
+            "[WARN] Estimating chromosome/scaffold lengths from the last BUSCO "
+            "position; lengths and sequences without BUSCOs are incomplete"
+        )
         chrom_lengths = locations.groupby("query_chr")["position"].max().reset_index()
         chrom_lengths["length"] = chrom_lengths["position"] * 1.05
+        chrom_lengths["localized_length"] = chrom_lengths["length"]
+        chrom_lengths["unlocalized_length"] = 0
 
     return locations, chrom_lengths
 
@@ -234,18 +293,27 @@ def calculate_windowed_alg_labels(
     min_fraction: float = DEFAULT_LABEL_WINDOW_MIN_FRACTION,
     wrap: int = DEFAULT_LABEL_WRAP,
 ) -> dict[str, str]:
-    """Return labels from dominant ALGs in non-overlapping genomic windows."""
+    """Return unambiguous dominant-ALG labels for genomic windows.
+
+    Fractions use every BUSCO hit in a window as the denominator, including
+    BUSCOs without a reference ALG assignment. Tied leading assignments are
+    not labelled.
+    """
     if window_mb <= 0:
         raise ValueError("--label-window-mb must be greater than 0")
+    if min_buscos <= 0:
+        raise ValueError("--label-window-min-buscos must be greater than 0")
     if not 0 < min_fraction <= 1:
         raise ValueError("--label-window-min-fraction must be > 0 and <= 1")
 
     window_bp = window_mb * 1_000_000
     windowed = locations.dropna(subset=["position"]).copy()
-    windowed["window"] = (windowed["position"] // window_bp).astype(int)
+    windowed["window"] = ((windowed["position"] - 1) // window_bp).astype(int)
+
+    assigned = windowed[windowed["assigned_alg"].isin(profile.valid_labels)]
 
     counts = (
-        windowed.groupby(["query_chr", "window", "assigned_alg"])
+        assigned.groupby(["query_chr", "window", "assigned_alg"])
         .size()
         .reset_index(name="n")
     )
@@ -261,6 +329,13 @@ def calculate_windowed_alg_labels(
         ascending=[True, True, False, True],
         kind="stable",
     )
+    counts["max_n"] = counts.groupby(["query_chr", "window"])["n"].transform("max")
+    counts["top_ties"] = (
+        counts["n"]
+        .eq(counts["max_n"])
+        .groupby([counts["query_chr"], counts["window"]])
+        .transform("sum")
+    )
     dominant = counts.drop_duplicates(["query_chr", "window"], keep="first").copy()
     totals = (
         windowed.groupby(["query_chr", "window"]).size().reset_index(name="window_n")
@@ -268,13 +343,28 @@ def calculate_windowed_alg_labels(
     dominant = dominant.merge(totals, on=["query_chr", "window"])
     dominant["fraction"] = dominant["n"] / dominant["window_n"]
     dominant = dominant[
-        (dominant["n"] >= min_buscos) & (dominant["fraction"] >= min_fraction)
+        (dominant["n"] >= min_buscos)
+        & (dominant["fraction"] >= min_fraction)
+        & (dominant["top_ties"] == 1)
     ]
 
     labels: dict[str, str] = {}
     for chrom in dominant["query_chr"].unique():
         chrom_windows = dominant[dominant["query_chr"] == chrom].sort_values("window")
-        algs = collapse_consecutive(chrom_windows["assigned_alg"].tolist())
+        algs: list[str] = []
+        previous_alg: str | None = None
+        previous_window: int | None = None
+        for row in chrom_windows.itertuples():
+            alg = str(row.assigned_alg)
+            window = int(row.window)
+            if (
+                alg != previous_alg
+                or previous_window is None
+                or window != previous_window + 1
+            ):
+                algs.append(alg)
+            previous_alg = alg
+            previous_window = window
         if algs:
             labels[chrom] = format_alg_label(algs, wrap=wrap)
     return labels
@@ -293,52 +383,103 @@ def plot_alg_chromosomes(
     label_window_mb: float = 0,
     label_window_min_buscos: int = 5,
     label_window_min_fraction: float = DEFAULT_LABEL_WINDOW_MIN_FRACTION,
+    show_bar_alg_labels: bool | None = None,
 ) -> None:
     """Create the main ALG plot with chromosome labels."""
     setup_font()
     Path(output_prefix).parent.mkdir(parents=True, exist_ok=True)
 
+    if show_bar_alg_labels is None:
+        show_bar_alg_labels = profile.id == "merian"
+
     valid_labels = profile.valid_labels
     colors = profile.palette(palette)
     is_valid_alg = locations["assigned_alg"].isin(valid_labels)
 
-    plotted_chroms = set(chrom_lengths["query_chr"].dropna().unique())
-    chrom_lengths = chrom_lengths[
-        chrom_lengths["query_chr"].isin(plotted_chroms)
-    ].copy()
+    chrom_lengths = chrom_lengths.copy()
+    chrom_lengths["query_chr"] = chrom_lengths["query_chr"].astype(str)
     if chrom_lengths.empty:
-        raise ValueError("No plotted chromosomes/scaffolds have matching lengths")
+        raise ValueError("No chromosome/scaffold lengths were supplied")
 
-    label_locations = locations[(locations["buscoID"] != "NA") & is_valid_alg].copy()
-    if label_window_mb > 0:
+    plotted_chroms = set(chrom_lengths["query_chr"].dropna().unique())
+    assigned_hits = locations[
+        (locations["buscoID"] != "NA") & is_valid_alg & locations["position"].notna()
+    ].copy()
+    missing_length = assigned_hits[~assigned_hits["query_chr"].isin(plotted_chroms)]
+    if not missing_length.empty:
+        if "position_status" in missing_length.columns:
+            expected_statuses = {
+                "unplaced-excluded",
+                "non-chromosome-excluded",
+                "unlocalized-without-parent",
+            }
+            expected = missing_length["position_status"].isin(expected_statuses)
+        else:
+            expected = pd.Series(False, index=missing_length.index)
+        unexpected = missing_length[~expected]
+        if not unexpected.empty:
+            examples = ", ".join(
+                unexpected["query_chr"].drop_duplicates().astype(str).head(5)
+            )
+            raise ValueError(
+                f"{len(unexpected)} assigned BUSCO rows have no matching "
+                f"chromosome/scaffold length (examples: {examples})"
+            )
         print(
-            "[INFO] Labelling dominant ALGs in "
-            f"{label_window_mb:g} Mb windows "
-            f"(min BUSCOs: {label_window_min_buscos}, "
-            f"min fraction: {label_window_min_fraction:g})"
+            f"[WARN] Excluding {len(missing_length)} assigned BUSCO rows on "
+            "unplaced or other non-chromosome sequences"
         )
-        alg_labels = calculate_windowed_alg_labels(
-            label_locations,
-            profile=profile,
-            window_mb=label_window_mb,
-            min_buscos=label_window_min_buscos,
-            min_fraction=label_window_min_fraction,
-            wrap=label_wrap,
+
+    matched_hits = assigned_hits[assigned_hits["query_chr"].isin(plotted_chroms)]
+    length_lookup = chrom_lengths.set_index("query_chr")["length"]
+    hit_lengths = matched_hits["query_chr"].map(length_lookup)
+    outside = matched_hits[
+        (matched_hits["position"] < 1) | (matched_hits["position"] > hit_lengths)
+    ]
+    if not outside.empty:
+        example = outside.iloc[0]
+        raise ValueError(
+            f"BUSCO {example['buscoID']!r} has plotted position "
+            f"{example['position']} outside {example['query_chr']!r}"
         )
-    else:
-        alg_labels = calculate_alg_labels(
-            label_locations,
-            profile=profile,
-            threshold=label_threshold,
-            wrap=label_wrap,
-        )
+
+    alg_labels: dict[str, str] = {}
+    if show_bar_alg_labels:
+        all_label_locations = locations[
+            (locations["buscoID"] != "NA") & locations["query_chr"].isin(plotted_chroms)
+        ].copy()
+        if label_window_mb > 0:
+            print(
+                "[INFO] Labelling dominant ALGs in "
+                f"{label_window_mb:g} Mb windows "
+                f"(min BUSCOs: {label_window_min_buscos}, "
+                f"min fraction: {label_window_min_fraction:g})"
+            )
+            alg_labels = calculate_windowed_alg_labels(
+                all_label_locations,
+                profile=profile,
+                window_mb=label_window_mb,
+                min_buscos=label_window_min_buscos,
+                min_fraction=label_window_min_fraction,
+                wrap=label_wrap,
+            )
+        else:
+            label_locations = all_label_locations[
+                all_label_locations["assigned_alg"].isin(valid_labels)
+            ]
+            alg_labels = calculate_alg_labels(
+                label_locations,
+                profile=profile,
+                threshold=label_threshold,
+                wrap=label_wrap,
+            )
     chrom_order = chrom_lengths.sort_values("length", ascending=False)[
         "query_chr"
     ].tolist()
 
     n_chroms = len(chrom_order)
     print(
-        f"[INFO] Plotting {len(locations)} BUSCOs across "
+        f"[INFO] Plotting {len(matched_hits)} assigned BUSCO hits across "
         f"{n_chroms} chromosomes/scaffolds..."
     )
 
@@ -409,6 +550,31 @@ def plot_alg_chromosomes(
             )
             ax.add_patch(rect)
 
+            localized_length = chrom_lengths[chrom_lengths["query_chr"] == chrom][
+                "localized_length"
+            ].values[0]
+            unlocalized_length = chrom_lengths[chrom_lengths["query_chr"] == chrom][
+                "unlocalized_length"
+            ].values[0]
+            if unlocalized_length > 0:
+                unlocalized_rect = patches.Rectangle(
+                    (localized_length, bar_bottom),
+                    unlocalized_length,
+                    profile.plot.bar_height,
+                    facecolor="#f0f0f0",
+                    edgecolor="#999999",
+                    linewidth=0.3,
+                    hatch="///",
+                )
+                ax.add_patch(unlocalized_rect)
+                ax.vlines(
+                    localized_length,
+                    bar_bottom,
+                    bar_bottom + profile.plot.bar_height,
+                    colors="#555555",
+                    linewidths=0.5,
+                )
+
             chrom_buscos = locations[
                 (locations["query_chr"] == chrom)
                 & locations["assigned_alg"].isin(valid_labels)
@@ -416,17 +582,26 @@ def plot_alg_chromosomes(
             for _, busco in chrom_buscos.iterrows():
                 if pd.notna(busco["position"]):
                     color = colors.get(busco["assigned_alg"], (0.85, 0.85, 0.85))
-                    tile = patches.Rectangle(
-                        (
-                            busco["position"] - profile.plot.tile_width_bp / 2,
+                    if profile.plot.tile_width_bp > 0:
+                        tile = patches.Rectangle(
+                            (
+                                busco["position"] - profile.plot.tile_width_bp / 2,
+                                bar_bottom,
+                            ),
+                            profile.plot.tile_width_bp,
+                            profile.plot.bar_height,
+                            facecolor=color,
+                            edgecolor="none",
+                        )
+                        ax.add_patch(tile)
+                    if profile.plot.marker_linewidth_pt is not None:
+                        ax.vlines(
+                            busco["position"],
                             bar_bottom,
-                        ),
-                        profile.plot.tile_width_bp,
-                        profile.plot.bar_height,
-                        facecolor=color,
-                        edgecolor="none",
-                    )
-                    ax.add_patch(tile)
+                            bar_bottom + profile.plot.bar_height,
+                            colors=color,
+                            linewidths=profile.plot.marker_linewidth_pt,
+                        )
 
             if chrom in alg_labels:
                 ax.text(
@@ -455,13 +630,26 @@ def plot_alg_chromosomes(
     plt.tight_layout()
 
     labels = list(profile.alg_order)
-    if is_valid_alg.any():
-        legend_elements = [
-            patches.Patch(facecolor=colors[label], label=label) for label in labels
-        ]
+    has_unlocalized_regions = bool((chrom_lengths["unlocalized_length"] > 0).any())
+    has_plotted_algs = not matched_hits.empty
+    if has_plotted_algs or has_unlocalized_regions:
+        legend_elements = []
+        if has_plotted_algs:
+            legend_elements.extend(
+                patches.Patch(facecolor=colors[label], label=label) for label in labels
+            )
+        if has_unlocalized_regions:
+            legend_elements.append(
+                patches.Patch(
+                    facecolor="#f0f0f0",
+                    edgecolor="#999999",
+                    hatch="///",
+                    label="Unlocalized scaffolds (appended)",
+                )
+            )
         fig.legend(
             handles=legend_elements,
-            title=profile.legend_title,
+            title=profile.legend_title if has_plotted_algs else "Assembly layout",
             loc="center left",
             bbox_to_anchor=(1.01, 0.5),
             frameon=False,
@@ -470,7 +658,7 @@ def plot_alg_chromosomes(
             ncol=profile.legend_columns,
             columnspacing=1.2,
         )
-    else:
+    if not has_plotted_algs:
         print(f"[WARN] No BUSCOs were assigned to known {profile.id} labels")
 
     for ext in ("png", "svg"):
@@ -498,10 +686,15 @@ def plot_locations(
     label_window_mb: float = 0,
     label_window_min_buscos: int = 5,
     label_window_min_fraction: float = DEFAULT_LABEL_WINDOW_MIN_FRACTION,
+    show_bar_alg_labels: bool | None = None,
+    allow_estimated_lengths: bool = False,
 ) -> None:
     print("[INFO] Loading data...")
     locations, chrom_lengths = load_data(
-        location_file, lengths_file, assembly_mode=assembly_mode
+        location_file,
+        lengths_file,
+        assembly_mode=assembly_mode,
+        allow_estimated_lengths=allow_estimated_lengths,
     )
     if profile is None:
         if config_path is not None:
@@ -522,6 +715,7 @@ def plot_locations(
         output_prefix,
         profile=profile,
         palette=palette,
+        show_bar_alg_labels=show_bar_alg_labels,
         label_threshold=label_threshold,
         panel_size=panel_size,
         max_columns=max_columns,

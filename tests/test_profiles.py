@@ -50,6 +50,11 @@ class ProfileTests(unittest.TestCase):
 
     def test_coleoptera_csv_bom_case_and_unassigned_rows(self) -> None:
         profile = load_profile("coleoptera")
+        for name in ("merian", "diptera", "brachycera", "coleoptera"):
+            with self.subTest(profile=name):
+                plot = load_profile(name).plot
+                self.assertEqual(plot.tile_width_bp, 0)
+                self.assertEqual(plot.marker_linewidth_pt, 0.5)
         self.assertTrue(
             profile.reference_table.read_bytes().startswith(b"\xef\xbb\xbf")
         )

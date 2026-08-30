@@ -9,12 +9,21 @@ DATA_ROOT="${DATA_ROOT:-.}"
 BUSCO_DIR="${BUSCO_DIR:-${DATA_ROOT}/busco}"
 OUTPUT_DIR="${OUTPUT_DIR:-${DATA_ROOT}/algs}"
 PROFILE="${PROFILE:-${LINEAGE:-auto}}"
+BAR_ALG_LABELS="${BAR_ALG_LABELS:-}"
 ALG_REF="${ALG_REF:-}"
 CUSTOM_CONFIG="${CUSTOM_CONFIG:-}"
 TOLID_FILE="${TOLID_FILE:-}"
 LABEL_WINDOW_MB="${LABEL_WINDOW_MB:-0}"
 LABEL_WINDOW_MIN_BUSCOS="${LABEL_WINDOW_MIN_BUSCOS:-5}"
 LABEL_WINDOW_MIN_FRACTION="${LABEL_WINDOW_MIN_FRACTION:-0.5}"
+
+case "$BAR_ALG_LABELS" in
+  ""|0|1) ;;
+  *)
+    echo "ERROR: BAR_ALG_LABELS must be 0 or 1" >&2
+    exit 2
+    ;;
+esac
 
 ACCESSION_TABLE_CANDIDATES=(
   "tolid_accessions.tsv"
@@ -111,6 +120,11 @@ process_tolid() {
     --label-window-min-buscos "$LABEL_WINDOW_MIN_BUSCOS"
     --label-window-min-fraction "$LABEL_WINDOW_MIN_FRACTION"
   )
+  if [[ "$BAR_ALG_LABELS" == "0" ]]; then
+    args+=(--no-bar-alg-labels)
+  elif [[ "$BAR_ALG_LABELS" == "1" ]]; then
+    args+=(--bar-alg-labels)
+  fi
   if [[ -n "$ALG_REF" ]]; then
     args+=(--reference-table "$ALG_REF")
   fi

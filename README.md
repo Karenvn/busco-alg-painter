@@ -35,6 +35,10 @@ PROFILE=auto \
 bash busco_to_algs.sh
 ```
 
+ALG text beside chromosome bars is shown by default only for Merian plots;
+chromosome names and the ALG legend remain on every profile. Override the
+profile-aware default with `BAR_ALG_LABELS=1` or `BAR_ALG_LABELS=0`.
+
 Single-assembly `run`, `paint` and `plot` commands remain available for
 individual genome notes, draft assemblies and testing.
 
@@ -140,6 +144,9 @@ The command works with all four profiles: `merian`, `diptera`,
 - `diptera_odb12` selects `diptera`, or `brachycera` when an accession, taxid
   or taxonomy string establishes Brachycera membership
 
+Use `--profile diptera` or `--profile brachycera` to bypass taxonomic detection
+and force a particular compatible reference.
+
 For example:
 
 ```bash
@@ -163,8 +170,22 @@ busco-alg-painter run \
 ```
 
 When `--accession` is supplied, chromosome lengths and public GenBank
-accessions are obtained from the NCBI Datasets API. Unlocalized scaffolds are
-added to the length of their parent chromosome.
+accessions are obtained from the NCBI Datasets API. In keeping with EBP
+"assigned to chromosomes" accounting, each plotted chromosome length is the
+assembled chromosome sequence plus scaffolds assigned to that chromosome whose
+exact placement is unknown.
+
+Those unlocalized scaffolds are appended after the localized chromosome in a
+deterministic pseudo-layout. Their BUSCO coordinates are offset into that
+appended region, which is hatched in the plot so it cannot be mistaken for a
+known physical placement. `sequence_layout.tsv` records every source sequence,
+offset and placement status. Unplaced scaffolds are recorded as excluded and
+are not added to a chromosome.
+
+Accurate plots require either `--accession` or `--lengths`. An exploratory plot
+may opt into last-BUSCO length estimates with `--allow-estimated-lengths`, but
+such a plot cannot include sequences without BUSCOs and must not be treated as
+having true chromosome lengths.
 
 ## BUSCO compatibility checks
 
@@ -187,14 +208,19 @@ compatible with a differently named BUSCO dataset.
 
 - `all_location.tsv`
 - `chrom_lengths.tsv` when `--accession` is used
+- `sequence_layout.tsv` when `--accession` is used
 - `summary.tsv` when `--write-summary` is used
 - PNG and SVG plots
 
 The standardized location columns are:
 
 ```text
-buscoID    query_chr    position    assigned_alg    status
+buscoID    query_chr    position    assigned_alg    status    source_sequence    sequence_role    position_status
 ```
+
+`chrom_lengths.tsv` retains the human-readable megabase value and includes
+exact base-pair totals, localized and unlocalized subtotals, and the number of
+unlocalized scaffolds. Plotting uses the exact base-pair column.
 
 For backward compatibility, `plot` can also read `all_location.tsv` files
 created by older versions of the Merian painter, where the assignment column
@@ -209,6 +235,17 @@ busco-alg-painter plot --help
 
 ## Plot controls
 
+ALG text beside chromosome bars defaults to visible for the `merian` profile
+and hidden for every other profile. Override that default while retaining the
+chromosome names and colour legend with:
+
+```bash
+busco-alg-painter plot \
+  --file output/all_location.tsv \
+  --profile diptera \
+  --bar-alg-labels
+```
+
 Chromosome labels can either include every ALG represented by at least
 `--label-threshold` BUSCOs or use the dominant assignment in genomic windows:
 
@@ -221,6 +258,11 @@ busco-alg-painter run \
   --label-window-min-buscos 5 \
   --label-window-min-fraction 0.5
 ```
+
+Windowing changes only the optional text beside chromosome bars. Every assigned
+BUSCO is still drawn at its exact midpoint as a fixed-width graphical line.
+Window fractions include unassigned BUSCO hits in the denominator, and tied
+leading ALGs are not labelled.
 
 Merian additionally retains the named palettes `merianbow4`, `merianbow`,
 `categorical` and `spectrum`:

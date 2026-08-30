@@ -26,7 +26,8 @@ legend_columns = 1
 bar_height = 0.45
 row_height_cm = 0.85
 min_plot_height_cm = 12
-tile_width_bp = 50000
+tile_width_bp = 0
+marker_linewidth_pt = 0.5
 
 [palettes.default]
 db1a = "#25d8a0ff"
