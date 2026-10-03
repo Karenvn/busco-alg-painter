@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 from pathlib import Path
 
 import matplotlib.patches as patches
@@ -25,6 +26,8 @@ COMPACT_LABEL_THRESHOLD = 80
 ASSEMBLY_MODES = ("auto", "final", "draft")
 DEFAULT_LABEL_WRAP = 4
 DEFAULT_LABEL_WINDOW_MIN_FRACTION = 0.5
+SEX_CHROMOSOME_PROFILES = {"diptera", "brachycera", "coleoptera"}
+SEX_CHROMOSOME_NAME_RE = re.compile(r"[XY](?:[1-9][0-9]*)?")
 
 
 def resolve_open_sans_font(env_var: str = "GENOMENOTES_FONT") -> str | None:
@@ -104,7 +107,9 @@ def load_lengths(lengths_file: Path, assembly_mode: str = "auto") -> pd.DataFram
         )
 
     if detected == "final":
-        chrom_lengths = pd.read_csv(lengths_file, sep="\t", dtype={"Chrom": str})
+        chrom_lengths = pd.read_csv(
+            lengths_file, sep="\t", dtype={"Chrom": str, "Assigned_Molecule": str}
+        )
         if "Length_bp" in chrom_lengths.columns:
             chrom_lengths["length"] = pd.to_numeric(
                 chrom_lengths["Length_bp"], errors="raise"
@@ -125,8 +130,19 @@ def load_lengths(lengths_file: Path, assembly_mode: str = "auto") -> pd.DataFram
             )
         else:
             chrom_lengths["unlocalized_length"] = 0
+        chrom_lengths["assigned_molecule"] = (
+            chrom_lengths["Assigned_Molecule"].fillna("")
+            if "Assigned_Molecule" in chrom_lengths.columns
+            else ""
+        )
         result = chrom_lengths.rename(columns={"Chrom": "query_chr"})[
-            ["query_chr", "length", "localized_length", "unlocalized_length"]
+            [
+                "query_chr",
+                "length",
+                "localized_length",
+                "unlocalized_length",
+                "assigned_molecule",
+            ]
         ]
     else:
         result = pd.read_csv(
@@ -139,6 +155,7 @@ def load_lengths(lengths_file: Path, assembly_mode: str = "auto") -> pd.DataFram
         )
         result["localized_length"] = result["length"]
         result["unlocalized_length"] = 0
+        result["assigned_molecule"] = ""
 
     result["query_chr"] = result["query_chr"].astype(str)
     numeric_columns = ("length", "localized_length", "unlocalized_length")
@@ -230,6 +247,28 @@ def format_alg_label(algs: list[str], wrap: int = DEFAULT_LABEL_WRAP) -> str:
         "; ".join(algs[index : index + wrap]) for index in range(0, len(algs), wrap)
     ]
     return "\n".join(wrapped_lines)
+
+
+def assigned_sex_chromosome_labels(
+    chrom_lengths: pd.DataFrame, profile: Profile
+) -> dict[str, str]:
+    """Return X/Y names explicitly assigned by NCBI, independently of BUSCOs.
+
+    Only the assembled molecule's assigned name is evidence of a sex chromosome;
+    accessions, sequence names and ancestral linkage groups are not used.
+    Numbered sex chromosomes such as X1 and X2 retain their assigned number.
+    """
+    if (
+        profile.id not in SEX_CHROMOSOME_PROFILES
+        or "assigned_molecule" not in chrom_lengths.columns
+    ):
+        return {}
+    labels = {}
+    for row in chrom_lengths.itertuples():
+        name = str(row.assigned_molecule).strip().upper()
+        if SEX_CHROMOSOME_NAME_RE.fullmatch(name):
+            labels[str(row.query_chr)] = name
+    return labels
 
 
 def split_balanced(values: list[str], n_groups: int) -> list[list[str]]:
@@ -473,6 +512,12 @@ def plot_alg_chromosomes(
                 threshold=label_threshold,
                 wrap=label_wrap,
             )
+    bar_labels = alg_labels.copy()
+    for chrom, sex_label in assigned_sex_chromosome_labels(
+        chrom_lengths, profile
+    ).items():
+        alg_label = alg_labels.get(chrom)
+        bar_labels[chrom] = f"{sex_label} ({alg_label})" if alg_label else sex_label
     chrom_order = chrom_lengths.sort_values("length", ascending=False)[
         "query_chr"
     ].tolist()
@@ -603,11 +648,11 @@ def plot_alg_chromosomes(
                             linewidths=profile.plot.marker_linewidth_pt,
                         )
 
-            if chrom in alg_labels:
+            if chrom in bar_labels:
                 ax.text(
                     length * (1 + LABEL_OFFSET_FACTOR),
                     y,
-                    alg_labels[chrom],
+                    bar_labels[chrom],
                     va="center",
                     ha="left",
                     fontsize=label_fontsize,

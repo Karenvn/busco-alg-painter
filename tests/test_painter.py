@@ -158,6 +158,51 @@ class PainterTests(unittest.TestCase):
                 ],
             )
 
+    def test_coordinate_suffix_is_removed_before_sequence_placement(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            query = Path(tmp) / "full_table.tsv"
+            query.write_text(
+                "# The lineage dataset is: lepidoptera_odb10\n"
+                "# Busco id\tStatus\tSequence\tGene Start\tGene End\n"
+                "9548at7088\tComplete\t"
+                "CAYFDH010000012.1:13659-12685\t13659\t12685\n"
+            )
+
+            rows, chromosomes = parse_busco_table(query)
+            self.assertEqual(
+                rows,
+                [("9548at7088", "CAYFDH010000012.1", 13659, 12685)],
+            )
+            self.assertEqual(chromosomes, ["CAYFDH010000012.1"])
+
+            _, placements, _ = build_sequence_layout(
+                [
+                    {
+                        "role": "assembled-molecule",
+                        "assigned_molecule_location_type": "Chromosome",
+                        "chr_name": "1",
+                        "sequence_name": "SUPER_1",
+                        "genbank_accession": "CAYFDH010000001.1",
+                        "length": 1_000_000,
+                        "sort_order": 1,
+                    },
+                    {
+                        "role": "unplaced-scaffold",
+                        "chr_name": "Un",
+                        "sequence_name": "HAP1_SCAFFOLD_59",
+                        "genbank_accession": "CAYFDH010000012.1",
+                        "length": 26_327,
+                        "sort_order": 2,
+                    }
+                ]
+            )
+            remapped, metadata, changed = place_query_buscos(rows, placements)
+
+            self.assertEqual(changed, 0)
+            self.assertEqual(remapped[0][1], "CAYFDH010000012.1")
+            self.assertEqual(metadata[0].role, "unplaced-scaffold")
+            self.assertEqual(metadata[0].position_status, "unplaced-excluded")
+
     def test_unlocalized_buscos_are_appended_and_unplaced_are_explicit(self) -> None:
         spans, placements, layout = build_sequence_layout(self.sequence_report())
         spans_by_chrom = {span.chrom: span for span in spans}

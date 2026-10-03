@@ -220,7 +220,9 @@ buscoID    query_chr    position    assigned_alg    status    source_sequence   
 
 `chrom_lengths.tsv` retains the human-readable megabase value and includes
 exact base-pair totals, localized and unlocalized subtotals, and the number of
-unlocalized scaffolds. Plotting uses the exact base-pair column.
+unlocalized scaffolds. `Assigned_Molecule` retains the assembled chromosome's
+NCBI `chr_name` (for example, `1`, `X` or `Y`). Plotting uses the exact base-pair
+column.
 
 For backward compatibility, `plot` can also read `all_location.tsv` files
 created by older versions of the Merian painter, where the assignment column
@@ -234,6 +236,18 @@ busco-alg-painter plot --help
 ```
 
 ## Plot controls
+
+For `diptera`, `brachycera` and `coleoptera`, NCBI-assigned sex chromosomes are
+labelled `X` or `Y` beside their bars, including chromosomes without BUSCO hits.
+Numbered assignments such as `X1` and `X2` retain their numbers. These labels use
+`Assigned_Molecule` from `chrom_lengths.tsv`, populated by `--accession`; they
+are independent of ALG assignments and remain visible with
+`--no-bar-alg-labels`. When ALG text is enabled, it follows the assigned name in
+parentheses, for example `X (CX)`. Merian labels are unchanged.
+
+Older length tables and `.fai` files remain supported but contain no assigned
+molecule metadata. Rerun `paint` or `run` with `--accession` to obtain these
+labels; sex chromosomes are never inferred from sequence names or ALG colours.
 
 ALG text beside chromosome bars defaults to visible for the `merian` profile
 and hidden for every other profile. Override that default while retaining the

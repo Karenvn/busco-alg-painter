@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import os
+import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +22,7 @@ from busco_alg_painter.profiles import (
 
 API_KEY = os.getenv("NCBI_API_KEY")
 PROFILE_CHOICES = ("auto", "merian", "diptera", "brachycera", "coleoptera")
+BUSCO_SEQUENCE_COORDINATES_RE = re.compile(r"^(?P<sequence>.+):\d+-\d+$")
 
 
 @dataclass(frozen=True)
@@ -47,6 +49,7 @@ class ChromosomeSpan:
     localized_length_bp: int
     unlocalized_length_bp: int
     unlocalized_scaffold_count: int
+    assigned_molecule: str = ""
 
     @property
     def length_bp(self) -> int:
@@ -93,6 +96,9 @@ def parse_busco_table(path: Path) -> tuple[list[tuple[str, str, int, int]], list
             busco_id, status, chrom, start, stop = row[:5]
             if status not in keep_status:
                 continue
+            coordinate_match = BUSCO_SEQUENCE_COORDINATES_RE.fullmatch(chrom)
+            if coordinate_match is not None:
+                chrom = coordinate_match.group("sequence")
             try:
                 start_coord, end_coord = int(start), int(stop)
             except ValueError:
@@ -484,6 +490,7 @@ def build_sequence_layout(
                 localized_length_bp=localized_length,
                 unlocalized_length_bp=offset - localized_length,
                 unlocalized_scaffold_count=len(unlocalized_records),
+                assigned_molecule=chrom_name,
             )
         )
 
@@ -672,11 +679,11 @@ def paint_buscos(
         print("[INFO] Using NCBI GenBank accessions for chromosome labels")
         length_lines = [
             "Chrom\tLength_Mb\tLength_bp\tLocalized_Length_bp\t"
-            "Unlocalized_Length_bp\tUnlocalized_scaffold_count"
+            "Unlocalized_Length_bp\tUnlocalized_scaffold_count\tAssigned_Molecule"
         ] + [
             f"{span.chrom}\t{span.length_bp / 1e6:.6f}\t{span.length_bp}\t"
             f"{span.localized_length_bp}\t{span.unlocalized_length_bp}\t"
-            f"{span.unlocalized_scaffold_count}"
+            f"{span.unlocalized_scaffold_count}\t{span.assigned_molecule}"
             for span in spans
         ]
         write_tsv(length_lines, out_len)

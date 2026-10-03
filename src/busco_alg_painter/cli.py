@@ -112,7 +112,8 @@ def add_plot_options(parser: argparse.ArgumentParser) -> None:
         default=None,
         help=(
             "Show ALG text beside chromosome bars "
-            "(default: show for Merian plots only)"
+            "(default: show for Merian plots only). NCBI-assigned X/Y labels "
+            "for fly and beetle profiles are always shown when available"
         ),
     )
     parser.add_argument(
